@@ -1,58 +1,74 @@
 # shareit
 
-Monorepo for the shareit project.
+Photo sharing platform monorepo with image processing pipeline and multi-platform clients.
 
-## Structure
+## Architecture
 
 ```
-shareit/
-├── apps/
-│   ├── backend/      Go: API (cmd/api) + image processing worker (cmd/worker)
-│   ├── web/           React webapp (Vite + TypeScript)
-│   ├── backoffice/    React admin panel (Vite + TypeScript)
-│   └── mobile/        React Native Android app (TypeScript)
-├── infra/
-│   └── postgres/      Database initialization scripts
-└── docker-compose.yml Runs Postgres, Redis, MinIO, API, and worker locally
+apps/
+  backend/            Go API and background image processing worker
+  web/                React web application (Vite + TypeScript)
+  backoffice/         React admin dashboard (Vite + TypeScript)
+  mobile/             React Native Android application
+infra/
+  postgres/           Database initialization scripts
+docker-compose.yml     Docker orchestration
 ```
 
-## Backend (apps/backend)
+### Components
 
-Requires Go 1.26+. Depends on Postgres, Redis, and an S3-compatible storage (MinIO) running — see the "Local Infrastructure" section below.
+- `apps/backend`: HTTP API (`cmd/api`) and Redis queue worker (`cmd/worker`) for thumbnail generation.
+- `apps/web`: User web interface.
+- `apps/backoffice`: Administrative dashboard.
+- `apps/mobile`: Android native mobile application.
+
+### Image Processing Pipeline
+
+1. `POST /photos`: Uploads original image to MinIO (`media` bucket, `originals/<id>`), saves pending metadata in PostgreSQL, and enqueues processing job to Redis.
+2. `worker`: Consumes Redis queue, downloads original file, generates a 400px JPEG thumbnail (`thumbnails/<id>.jpg`), and updates metadata status to `ready`.
+
+## Development
+
+### Prerequisites
+
+- Go 1.26+
+- Node.js 22+
+- Docker / Podman
+- JDK and Android SDK (for mobile)
+
+### Running Services
+
+Start local infrastructure (PostgreSQL, Redis, MinIO):
+
+```bash
+docker compose up -d postgres redis minio minio-init
+```
+
+Start the full stack including API and worker:
+
+```bash
+docker compose up -d
+```
+
+### Manual Execution
+
+Backend services:
 
 ```bash
 cd apps/backend
-go run ./cmd/api      # HTTP API
-go run ./cmd/worker   # Worker processing the image queue
+go run ./cmd/api
+go run ./cmd/worker
 ```
 
-Environment variables:
-- `PORT` (default `8080`)
-- `DATABASE_URL` (default `postgres://shareit:shareit@localhost:5432/shareit?sslmode=disable`)
-- `REDIS_URL` (default `redis://localhost:6379/0`)
-- `S3_ENDPOINT` (default `localhost:9000`)
-- `S3_ACCESS_KEY` / `S3_SECRET_KEY` (default `shareit` / `shareit123`)
-- `S3_BUCKET` (default `media`)
-- `S3_USE_SSL` (default `false`)
-
-### Photo Upload Flow
-
-1. `POST /photos` (multipart, `file` field) — the API saves the original file to the `media` bucket (`originals/<id>`), writes metadata to Postgres (status `pending`), and queues a job in Redis.
-2. The `worker` consumes the queue, downloads the original from storage, generates a thumbnail (400px, JPEG), uploads it to `thumbnails/<id>.jpg`, and updates the status to `ready`.
-
-## Web (apps/web) and Backoffice (apps/backoffice)
-
-Requires Node 22+.
+Web client:
 
 ```bash
-cd apps/web        # or apps/backoffice
+cd apps/web
 npm install
 npm run dev
 ```
 
-## Mobile (apps/mobile)
-
-Android-focused React Native application. Requires a configured React Native environment (JDK, Android SDK, `ANDROID_HOME` variable) — see the [official guide](https://reactnative.dev/docs/set-up-your-environment).
+Mobile client:
 
 ```bash
 cd apps/mobile
@@ -60,19 +76,14 @@ npm install
 npm run android
 ```
 
-## Local Infrastructure
+### Service Endpoints
 
-```bash
-docker compose up -d postgres redis minio minio-init
-```
-
-This starts:
-- **Postgres** on `localhost:5432` (`shareit` database, `shareit`/`shareit` credentials), applying `infra/postgres/init.sql` on first startup.
-- **Redis** on `localhost:6379`, used for image processing queues.
-- **MinIO** (S3-compatible) on `localhost:9000` (API) and `localhost:9001` (web console, login `shareit` / `shareit123`). The `minio-init` service automatically creates the `media` bucket.
-
-To run everything, including API and worker:
-
-```bash
-docker compose up -d
-```
+| Service | Type | Port | Endpoint |
+|---------|------|------|----------|
+| Web App | Frontend | `5173` | http://localhost:5173 |
+| Backoffice | Frontend | `5174` | http://localhost:5174 |
+| HTTP API | Backend | `8080` | http://localhost:8080 |
+| PostgreSQL | Database | `5432` | localhost:5432/shareit |
+| Redis | Cache/Queue | `6379` | localhost:6379 |
+| MinIO API | Storage | `9000` | http://localhost:9000 |
+| MinIO Console | Storage UI | `9001` | http://localhost:9001 |
