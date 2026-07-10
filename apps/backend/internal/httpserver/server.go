@@ -3,6 +3,7 @@ package httpserver
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -33,6 +34,7 @@ func NewRouter(pool *pgxpool.Pool, store *storage.Storage, q *queue.Queue) http.
 	mux.HandleFunc("GET /health", s.handleHealth)
 	mux.HandleFunc("GET /health/db", s.handleHealthDB)
 	mux.HandleFunc("POST /photos", s.handleUploadPhoto)
+	mux.HandleFunc("POST /photos/presigned", s.handlePresignedUpload)
 	return mux
 }
 
@@ -85,6 +87,34 @@ func (s *Server) handleUploadPhoto(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"id": id, "status": "pending"})
+}
+
+func (s *Server) handlePresignedUpload(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := uuid.NewString()
+	originalKey := "originals/" + id
+
+	uploadURL, err := s.storage.GetPresignedUploadURL(ctx, originalKey, 15*time.Minute)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate upload URL"})
+		return
+	}
+
+	if err := s.photos.Create(ctx, id, originalKey); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to save photo metadata"})
+		return
+	}
+
+	if err := s.queue.PushImageJob(ctx, queue.ImageJob{PhotoID: id, OriginalKey: originalKey}); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to enqueue processing job"})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]string{
+		"id":         id,
+		"upload_url": uploadURL,
+		"status":     "pending",
+	})
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
