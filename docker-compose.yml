@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shareit
+      POSTGRES_PASSWORD: shareit
+      POSTGRES_DB: shareit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+  backend:
+    build:
+      context: ./apps/backend
+    restart: unless-stopped
+    depends_on:
+      - postgres
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://shareit:shareit@postgres:5432/shareit?sslmode=disable
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:
