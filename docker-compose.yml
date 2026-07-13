@@ -7,22 +7,83 @@ services:
       POSTGRES_PASSWORD: shareit
       POSTGRES_DB: shareit
     ports:
-      - "5432:5432"
+      - "5434:5432" # non-default host port: avoids clashing with other local postgres containers
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: shareit
+      MINIO_ROOT_PASSWORD: shareit123
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web console
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until (mc alias set local http://minio:9000 shareit shareit123) do sleep 1; done;
+      mc mb --ignore-existing local/media;
+      mc anonymous set download local/media;
+      "
+
   backend:
     build:
       context: ./apps/backend
+      dockerfile: Dockerfile
     restart: unless-stopped
     depends_on:
       - postgres
+      - redis
+      - minio
     environment:
       PORT: "8080"
       DATABASE_URL: postgres://shareit:shareit@postgres:5432/shareit?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: shareit
+      S3_SECRET_KEY: shareit123
+      S3_BUCKET: media
+      S3_USE_SSL: "false"
     ports:
-      - "8080:8080"
+      - "8090:8080" # non-default host port: avoids clashing with other local services on 8080
+
+  worker:
+    build:
+      context: ./apps/backend
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - redis
+      - minio
+    environment:
+      DATABASE_URL: postgres://shareit:shareit@postgres:5432/shareit?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      S3_ENDPOINT: minio:9000
+      S3_ACCESS_KEY: shareit
+      S3_SECRET_KEY: shareit123
+      S3_BUCKET: media
+      S3_USE_SSL: "false"
 
 volumes:
   postgres_data:
+  redis_data:
+  minio_data:
