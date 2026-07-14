@@ -44,7 +44,10 @@ func main() {
 
 	repo := photos.NewRepository(pool)
 
-	log.Println("worker started, waiting for image jobs")
+	const maxConcurrentWorkers = 3
+	sem := make(chan struct{}, maxConcurrentWorkers)
+
+	log.Println("worker started, waiting for image jobs (max concurrency:", maxConcurrentWorkers, ")")
 	for {
 		job, err := q.PopImageJob(ctx, popTimeout)
 		if err != nil {
@@ -55,15 +58,30 @@ func main() {
 			continue // timeout, no job available
 		}
 
-		if err := process(ctx, store, repo, *job); err != nil {
-			log.Printf("failed to process photo %s: %v", job.PhotoID, err)
-			if err := repo.MarkFailed(ctx, job.PhotoID); err != nil {
-				log.Printf("failed to mark photo %s as failed: %v", job.PhotoID, err)
+		sem <- struct{}{}
+		go func(j queue.ImageJob) {
+			defer func() { <-sem }()
+			if err := processWithRetry(ctx, store, repo, j, 3); err != nil {
+				log.Printf("failed to process photo %s after retries: %v", j.PhotoID, err)
+				if err := repo.MarkFailed(ctx, j.PhotoID); err != nil {
+					log.Printf("failed to mark photo %s as failed: %v", j.PhotoID, err)
+				}
+				return
 			}
-			continue
-		}
-		log.Printf("processed photo %s", job.PhotoID)
+			log.Printf("processed photo %s", j.PhotoID)
+		}(*job)
 	}
+}
+
+func processWithRetry(ctx context.Context, store *storage.Storage, repo *photos.Repository, job queue.ImageJob, retries int) error {
+	var err error
+	for i := 0; i < retries; i++ {
+		if err = process(ctx, store, repo, job); err == nil {
+			return nil
+		}
+		time.Sleep(time.Duration(i+1) * 2 * time.Second)
+	}
+	return err
 }
 
 func process(ctx context.Context, store *storage.Storage, repo *photos.Repository, job queue.ImageJob) error {
