@@ -1,0 +1,193 @@
+name: On Main
+run-name: On Main - ${{ gitea.actor }}
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: "gitea.nilbyte.com.br"
+  IMAGE_NAMESPACE: "nilbyte/shareit"
+  GIT_USER_NAME: "ci-bot"
+  GIT_USER_EMAIL: "ci@nilbyte.com.br"
+
+jobs:
+  build-backend:
+    runs-on: runner
+    steps:
+      - name: Checkout main with credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea.nilbyte.com.br" > ~/.git-credentials
+          echo "http://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea:3000" >> ~/.git-credentials
+          git clone --branch main "${{ gitea.server_url }}/${{ gitea.repository }}.git" .
+          git checkout "${{ gitea.sha }}"
+          git config user.name "${{ env.GIT_USER_NAME }}"
+          git config user.email "${{ env.GIT_USER_EMAIL }}"
+
+      - name: Detect changes
+        id: check
+        run: |
+          CHANGED=false
+          if [ "${{ gitea.event_name }}" = "workflow_dispatch" ]; then
+            CHANGED=true
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            if git diff --name-only HEAD^ HEAD | grep -Eq '^(apps/backend/|.gitea/workflows/)'; then
+              CHANGED=true
+            fi
+          else
+            CHANGED=true
+          fi
+          echo "CHANGED=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Login to registry
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          echo "${{ secrets.TOKEN_COMPLETE }}" | docker login "${{ env.REGISTRY }}" -u notNilton --password-stdin
+
+      - name: Build and push backend image
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(cat apps/backend/VERSION | tr -d '[:space:]')
+          docker build -f apps/backend/Dockerfile \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:latest" \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:${VERSION}" \
+            apps/backend/
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:${VERSION}"
+
+      - name: Bump backend version
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(cat apps/backend/VERSION | tr -d '[:space:]')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          echo "$NEW_VERSION" > apps/backend/VERSION
+          git add apps/backend/VERSION
+          git commit -m "chore(release): backend $NEW_VERSION [skip ci]"
+          git pull --rebase origin main
+          git push origin main
+
+  build-web:
+    runs-on: runner
+    steps:
+      - name: Checkout main with credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea.nilbyte.com.br" > ~/.git-credentials
+          echo "http://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea:3000" >> ~/.git-credentials
+          git clone --branch main "${{ gitea.server_url }}/${{ gitea.repository }}.git" .
+          git checkout "${{ gitea.sha }}"
+          git config user.name "${{ env.GIT_USER_NAME }}"
+          git config user.email "${{ env.GIT_USER_EMAIL }}"
+
+      - name: Detect changes
+        id: check
+        run: |
+          CHANGED=false
+          if [ "${{ gitea.event_name }}" = "workflow_dispatch" ]; then
+            CHANGED=true
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            if git diff --name-only HEAD^ HEAD | grep -Eq '^(apps/web/|.gitea/workflows/)'; then
+              CHANGED=true
+            fi
+          else
+            CHANGED=true
+          fi
+          echo "CHANGED=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Login to registry
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          echo "${{ secrets.TOKEN_COMPLETE }}" | docker login "${{ env.REGISTRY }}" -u notNilton --password-stdin
+
+      - name: Build and push web image
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(node -e "process.stdout.write(require('./apps/web/package.json').version)")
+          docker build -f apps/web/Dockerfile \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:latest" \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${VERSION}" \
+            apps/web/
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${VERSION}"
+
+      - name: Bump web version
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(node -e "process.stdout.write(require('./apps/web/package.json').version)")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('apps/web/package.json'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('apps/web/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          git add apps/web/package.json
+          git commit -m "chore(release): web $NEW_VERSION [skip ci]"
+          git pull --rebase origin main
+          git push origin main
+
+  build-backoffice:
+    runs-on: runner
+    steps:
+      - name: Checkout main with credentials
+        run: |
+          git config --global credential.helper store
+          echo "https://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea.nilbyte.com.br" > ~/.git-credentials
+          echo "http://oauth2:${{ secrets.TOKEN_COMPLETE }}@gitea:3000" >> ~/.git-credentials
+          git clone --branch main "${{ gitea.server_url }}/${{ gitea.repository }}.git" .
+          git checkout "${{ gitea.sha }}"
+          git config user.name "${{ env.GIT_USER_NAME }}"
+          git config user.email "${{ env.GIT_USER_EMAIL }}"
+
+      - name: Detect changes
+        id: check
+        run: |
+          CHANGED=false
+          if [ "${{ gitea.event_name }}" = "workflow_dispatch" ]; then
+            CHANGED=true
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            if git diff --name-only HEAD^ HEAD | grep -Eq '^(apps/backoffice/|.gitea/workflows/)'; then
+              CHANGED=true
+            fi
+          else
+            CHANGED=true
+          fi
+          echo "CHANGED=$CHANGED" >> "$GITHUB_OUTPUT"
+
+      - name: Login to registry
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          echo "${{ secrets.TOKEN_COMPLETE }}" | docker login "${{ env.REGISTRY }}" -u notNilton --password-stdin
+
+      - name: Build and push backoffice image
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(node -e "process.stdout.write(require('./apps/backoffice/package.json').version)")
+          docker build -f apps/backoffice/Dockerfile \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:latest" \
+            -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:${VERSION}" \
+            apps/backoffice/
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:latest"
+          docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:${VERSION}"
+
+      - name: Bump backoffice version
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          VERSION=$(node -e "process.stdout.write(require('./apps/backoffice/package.json').version)")
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          NEW_VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('apps/backoffice/package.json'));
+            pkg.version = '$NEW_VERSION';
+            fs.writeFileSync('apps/backoffice/package.json', JSON.stringify(pkg, null, 2) + '\n');
+          "
+          git add apps/backoffice/package.json
+          git commit -m "chore(release): backoffice $NEW_VERSION [skip ci]"
+          git pull --rebase origin main
+          git push origin main
