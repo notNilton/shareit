@@ -51,7 +51,7 @@ jobs:
         if: steps.check.outputs.CHANGED == 'true'
         run: |
           VERSION=$(cat apps/backend/VERSION | tr -d '[:space:]')
-          docker build -f apps/backend/Dockerfile \
+          docker build \
             -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:latest" \
             -t "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:${VERSION}" \
             apps/backend/
