@@ -70,6 +70,12 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
+      - name: Deploy backend
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          docker compose -f infra/docker-compose.prod.yml up -d shareit-backend shareit-worker
+
+
   build-web:
     runs-on: runner
     steps:
@@ -131,6 +137,11 @@ jobs:
           git pull --rebase origin main
           git push origin main
 
+      - name: Deploy web
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          docker compose -f infra/docker-compose.prod.yml up -d shareit-web
+
   build-backoffice:
     runs-on: runner
     steps:
@@ -191,3 +202,8 @@ jobs:
           git commit -m "chore(release): backoffice $NEW_VERSION [skip ci]"
           git pull --rebase origin main
           git push origin main
+
+      - name: Deploy backoffice
+        if: steps.check.outputs.CHANGED == 'true'
+        run: |
+          docker compose -f infra/docker-compose.prod.yml up -d shareit-backoffice
