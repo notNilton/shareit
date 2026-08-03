@@ -4,8 +4,10 @@ package storage
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/minio/minio-go/v7"
+
 	"github.com/minio/minio-go/v7/pkg/credentials"
 
 	"shareit/backend/internal/config"
@@ -48,3 +50,22 @@ func (s *Storage) Upload(ctx context.Context, key string, reader io.Reader, size
 func (s *Storage) Download(ctx context.Context, key string) (*minio.Object, error) {
 	return s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
 }
+
+// GetPresignedUploadURL gera uma URL assinada para o cliente fazer upload direto no MinIO.
+func (s *Storage) GetPresignedUploadURL(ctx context.Context, key string, expires time.Duration) (string, error) {
+	u, err := s.client.PresignedPutObject(ctx, s.bucket, key, expires)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
+// GetPresignedDownloadURL gera uma URL assinada para leitura direta de imagem/thumbnail.
+func (s *Storage) GetPresignedDownloadURL(ctx context.Context, key string, expires time.Duration) (string, error) {
+	u, err := s.client.PresignedGetObject(ctx, s.bucket, key, expires, nil)
+	if err != nil {
+		return "", err
+	}
+	return u.String(), nil
+}
+
