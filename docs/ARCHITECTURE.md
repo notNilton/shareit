@@ -1,3 +1,5 @@
-# 📐 Shareit Architecture
+# 📐 ShareIt Monorepo Architecture
 
-Documentação de arquitetura do repositório shareit.
+Architecture of the ShareIt monorepo.
+
+
