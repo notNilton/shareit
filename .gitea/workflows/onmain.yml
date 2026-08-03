@@ -57,6 +57,10 @@ jobs:
             .
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:latest"
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:${VERSION}"
+          echo "### 🚀 Backend Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image Tag**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backend:${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: Pushed successfully to registry" >> "$GITHUB_STEP_SUMMARY"
+
 
       - name: Bump backend version
         if: steps.check.outputs.CHANGED == 'true'
@@ -113,6 +117,9 @@ jobs:
             apps/web
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:latest"
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${VERSION}"
+          echo "### 🚀 Web Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image Tag**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/web:${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: Pushed successfully to registry" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bump web version
         if: steps.check.outputs.CHANGED == 'true'
@@ -174,6 +181,9 @@ jobs:
             apps/backoffice
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:latest"
           docker push "${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:${VERSION}"
+          echo "### 🚀 Backoffice Build Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Image Tag**: \`${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/backoffice:${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Status**: Pushed successfully to registry" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Bump backoffice version
         if: steps.check.outputs.CHANGED == 'true'
