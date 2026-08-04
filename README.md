@@ -87,3 +87,10 @@ npm run android
 | Redis | Cache/Queue | `6379` | localhost:6379 |
 | MinIO API | Storage | `9000` | http://localhost:9000 |
 | MinIO Console | Storage UI | `9001` | http://localhost:9001 |
+
+
+## Documentation
+
+- [📋 Roadmap & TODOs](docs/TODO.md) - Planned features and project roadmap
+- [📐 Architecture](docs/ARCHITECTURE.md) - System architecture and components
+- [📄 License](LICENSE) - MIT License
